@@ -1,0 +1,17 @@
+* {
+  padding: 0;
+  margin: 0;
+}
+canvas {
+  background: #eee;
+  display: block;
+  margin: auto auto;
+}
+
+/* #app {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100hv;
+  width: 100hw;
+} */
