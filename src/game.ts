@@ -20,8 +20,19 @@ type CanvasConfig = {
 }
 
 type GameData = {
-  ball: Ball
+  ball: Ball,
+  paddle: Paddle
 }
+
+type Paddle = {
+  height: number,
+  width: number,
+  position: Position
+}
+
+const KEYBOARD_ARROW_LEFT_CODE = "ArrowLeft"
+const KEYBOARD_ARROW_RIGHT_CODE = "ArrowRight"
+
 
 const startGame = (): void => {
   const canvasConfig: CanvasConfig = {
@@ -35,6 +46,18 @@ const startGame = (): void => {
   root.append(canvas)
 
   const state: GameData = {
+    control: {
+      leftPressted: false,
+      rightPressted: false,
+    },
+    paddle: {
+      height: 10,
+      width: 75,
+      position: {
+        x: (canvasConfig.width - 75) / 2,
+        y: (canvasConfig.height - 20),
+      }
+    },
     ball: {
       radius: 10,
       position: {
@@ -45,21 +68,39 @@ const startGame = (): void => {
     }
   }
 
+  document.addEventListener("keydown", (e: KeyboardEvent) => {
+    if (e.key == KEYBOARD_ARROW_RIGHT_CODE) {
+      state.control.rightPressed = true;
+    } else if (e.key == KEYBOARD_ARROW_LEFT_CODE) {
+      state.control.leftPressed = true;
+    }
+  }, false);
+
+  document.addEventListener("keyup", (e: Event) => {
+  if (e.key == KEYBOARD_ARROW_RIGHT_CODE) {
+    state.control.rightPressed = false;
+  } else if (e.key == KEYBOARD_ARROW_LEFT_CODE) {
+    state.control.leftPressed = false;
+  }
+}, false);
+
   console.log(state)
   setInterval(() => {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     drawBall(ctx, state.ball)
+    drawPaddle(ctx, state.paddle)
 
     move(state.ball)
+    movePaddle(state.paddle, state.control)
     bounce(state.ball, canvasConfig)
   }, 16.7) // 60 frames per sec
 }
 
-const makeCanvas = (config): HTMLCanvasElement => {
+const makeCanvas = (config: CanvasConfig): HTMLCanvasElement => {
   const canvas = document.createElement('canvas')
-  canvas.setAttribute('width', config.width)
-  canvas.setAttribute('height', config.height)
+  canvas.setAttribute('width', config.width.toString())
+  canvas.setAttribute('height', config.height.toString())
 
   return canvas
 }
@@ -67,6 +108,14 @@ const makeCanvas = (config): HTMLCanvasElement => {
 const drawBall = (ctx: CanvasRenderingContext2D, ball: Ball) => {
   ctx.beginPath();
   ctx.arc(ball.position.x, ball.position.y, ball.radius, 0, Math.PI * 2);
+  ctx.fillStyle = "#0095DD";
+  ctx.fill();
+  ctx.closePath();
+}
+
+const drawPaddle = (ctx: CanvasRenderingContext2D, paddle: Paddle) => {
+  ctx.beginPath();
+  ctx.rect(paddle.position.x, paddle.position.y, paddle.width, paddle.height);
   ctx.fillStyle = "#0095DD";
   ctx.fill();
   ctx.closePath();
@@ -99,6 +148,16 @@ const bounce = (ball: Ball, canvasConfig: CanvasConfig) => {
   if ((nextPosition.y > topBorder ) || nextPosition.y < botBorder) {
     direction.dy = -(direction.dy)
   }
+}
+
+const movePaddle = (paddle: Paddle, control) => {
+  if (control.rightPressed) {
+    paddle.position.x += 7
+  }
+  if (control.leftPressed) {
+    paddle.position.x += -7
+  }
+
 }
 
 // const inRadius = (point, circumference) => {
