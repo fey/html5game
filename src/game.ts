@@ -92,7 +92,7 @@ const startGame = (): void => {
     drawPaddle(ctx, state.paddle)
 
     move(state.ball)
-    movePaddle(state.paddle, state.control)
+    movePaddle(state.paddle, state.control, canvasConfig)
     bounce(state.ball, canvasConfig)
   }, 16.7) // 60 frames per sec
 }
@@ -150,14 +150,17 @@ const bounce = (ball: Ball, canvasConfig: CanvasConfig) => {
   }
 }
 
-const movePaddle = (paddle: Paddle, control) => {
-  if (control.rightPressed) {
+const movePaddle = (paddle: Paddle, control: any, canvasConfig: CanvasConfig) => {
+  const positionX  = paddle.position.x;
+  const leftBorder = 0;
+  const rightBorder = canvasConfig.width - paddle.width;
+
+  if (control.rightPressed && (positionX < rightBorder)) {
     paddle.position.x += 7
   }
-  if (control.leftPressed) {
+  if (control.leftPressed && (positionX > leftBorder)) {
     paddle.position.x += -7
   }
-
 }
 
 // const inRadius = (point, circumference) => {
