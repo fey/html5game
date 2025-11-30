@@ -11,6 +11,7 @@ type Direction = {
 type Ball = {
   radius: number
   position: Position,
+  direction: Direction,
 }
 
 type CanvasConfig = {
@@ -24,8 +25,8 @@ type GameData = {
 
 const startGame = (): void => {
   const canvasConfig: CanvasConfig = {
-    width: 480,
-    height: 320
+    width: 680,
+    height: 440
   }
 
   const root = document.querySelector<HTMLDivElement>(('#app'))!
@@ -39,20 +40,20 @@ const startGame = (): void => {
       position: {
         x: canvas.width / 2,
         y: canvas.height - 30,
-      }
+      },
+      direction: {dx: 4, dy: -4}
     }
   }
 
+  console.log(state)
   setInterval(() => {
-    ctx.clearRect(0, 0, canvas.height, canvas.width);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     drawBall(ctx, state.ball)
 
-    move(state.ball, {dx: 2, dy: -2})
+    move(state.ball)
+    bounce(state.ball, canvasConfig)
   }, 16.7) // 60 frames per sec
-  setInterval(() => {
-    console.log(state.ball.position.y)
-  }, 1000)
 }
 
 const makeCanvas = (config): HTMLCanvasElement => {
@@ -64,10 +65,8 @@ const makeCanvas = (config): HTMLCanvasElement => {
 }
 
 const drawBall = (ctx: CanvasRenderingContext2D, ball: Ball) => {
-  const { position } = ball;
-
   ctx.beginPath();
-  ctx.arc(position.x, position.y, ball.radius, 0, Math.PI * 2);
+  ctx.arc(ball.position.x, ball.position.y, ball.radius, 0, Math.PI * 2);
   ctx.fillStyle = "#0095DD";
   ctx.fill();
   ctx.closePath();
@@ -75,13 +74,36 @@ const drawBall = (ctx: CanvasRenderingContext2D, ball: Ball) => {
 
 export default startGame;
 
-
-
-const draw = (canvas: HTMLCanvasElement, state: object): void => {
-
+const move = (ball: Ball): void => {
+  ball.position.x += ball.direction.dx
+  ball.position.y += ball.direction.dy
 }
 
-const move = (figure: any, direction: Direction): void => {
-  figure.position += direction.dx
-  figure.position += direction.dy
+const bounce = (ball: Ball, canvasConfig: CanvasConfig) => {
+  const { position, direction } = ball;
+
+  const nextPosition: Position = {
+    x: position.x + direction.dx,
+    y: position.y + direction.dy,
+  }
+
+  const topBorder = canvasConfig.height - ball.radius
+  const botBorder = ball.radius
+  const leftBorder = ball.radius
+  const rightBorder = canvasConfig.width - ball.radius
+
+  if (nextPosition.x > rightBorder || nextPosition.x < leftBorder) {
+    direction.dx = -(direction.dx)
+  }
+
+  if ((nextPosition.y > topBorder ) || nextPosition.y < botBorder) {
+    direction.dy = -(direction.dy)
+  }
 }
+
+// const inRadius = (point, circumference) => {
+//   // Формула для определения принадлежности точки к окружности, если она задана координатами (x; y), 
+//   // может быть такой: координаты точки должны удовлетворять условию
+//   // (x-x0)^2+(y-y0)^2 <= R^2, где точка (х0, у0) — центр окружности, R — её радиус.
+//   return ((point.x - circumference.x) ** 2 + (point.y - circumference.y) ** 2) <= (circumference.radius ** 2)
+// }
