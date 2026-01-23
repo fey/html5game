@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Battle Tanks: Enemy Patrols</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #1a1a1a; color: #0f0; font-family: sans-serif; }
+        canvas { display: block; background: #222; }
+        .ui { position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,0.8); padding: 15px; border: 2px solid #4CAF50; pointer-events: none; border-radius: 8px; z-index: 10; }
+        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; transition: background 0.1s; z-index: 5; }
+        .victory-screen { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.9); padding: 50px; border: 5px solid #ffeb3b; color: #ffeb3b; font-size: 48px; display: none; text-align: center; z-index: 20; }
+    </style>
+</head>
+<body>
+    <div id="overlay"></div>
+    <div class="ui">
+        HP: <span id="hp" style="color: #ff4444; font-weight: bold;">3</span> | ВРАГИ: <span id="tcount">0</span><br>
+        <small>WASD - Танк | МЫШЬ - Огонь</small>
+    </div>
+    <div id="victory" class="victory-screen">ПОБЕДА!<br><small style="font-size: 20px;">Миссия выполнена</small></div>
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const overlay = document.getElementById('overlay');
+
+let width = canvas.width = window.innerWidth;
+let height = canvas.height = window.innerHeight;
+
+const tank = { 
+    x: 80, y: 80, angle: 0, turretAngle: 0, 
+    hp: 3, speed: 0, vx: 0, vy: 0, reload: 0, w: 36, h: 24 
+};
+
+const bricks = [];
+const turrets = [];
+const enemyTanks = [];
+const bullets = [];
+const keys = {};
+const BRICK_SIZE = 20;
+
+function init() {
+    // Стены
+    for(let i = 0; i < 12; i++) {
+        let startX = 200 + Math.random() * (width - 450);
+        let startY = Math.random() * (height - 200);
+        let rows = Math.floor(Math.random() * 5) + 4;
+        let cols = Math.floor(Math.random() * 3) + 3;
+        for(let r = 0; r < rows; r++) {
+            for(let c = 0; c < cols; c++) {
+                bricks.push({ x: startX + c * BRICK_SIZE, y: startY + r * BRICK_SIZE });
+            }
+        }
+    }
+
+    // Рандомные турели
+    for(let i = 0; i < 2; i++) {
+        turrets.push({
+            x: width/2 + Math.random() * (width/2 - 100),
+            y: 100 + Math.random() * (height - 200),
+            angle: 0, hp: 2, reload: 60
+        });
+    }
+
+    // Серые танки-враги
+    for(let i = 0; i < 2; i++) {
+        enemyTanks.push({
+            x: width - 150, y: 150 + i * 200,
+            angle: Math.PI, turretAngle: Math.PI,
+            hp: 2, speed: 0.8, reload: 0,
+            w: 36, h: 24,
+            targetX: Math.random() * width, targetY: Math.random() * height,
+            state: 'patrol' // patrol или attack
+        });
+    }
+    updateEnemyCount();
+}
+
+function updateEnemyCount() {
+    document.getElementById('tcount').innerText = turrets.length + enemyTanks.length;
+}
+
+function checkBrickCollision(x, y, size) {
+    for (let i = 0; i < bricks.length; i++) {
+        let b = bricks[i];
+        if (x + size > b.x && x - size < b.x + BRICK_SIZE && 
+            y + size > b.y && y - size < b.y + BRICK_SIZE) return i;
+    }
+    return -1;
+}
+
+function canSee(obj1, obj2) {
+    let dx = obj2.x - obj1.x;
+    let dy = obj2.y - obj1.y;
+    let dist = Math.hypot(dx, dy);
+    let steps = 20;
+    for (let i = 1; i < steps; i++) {
+        let px = obj1.x + dx * (i / steps);
+        let py = obj1.y + dy * (i / steps);
+        if (checkBrickCollision(px, py, 2) !== -1) return false;
+    }
+    return true;
+}
+
+window.onkeydown = e => keys[e.code] = true;
+window.onkeyup = e => keys[e.code] = false;
+window.onmousemove = e => {
+    tank.turretAngle = Math.atan2(e.clientY - tank.y, e.clientX - tank.x);
+};
+window.onmousedown = () => {
+    if (tank.reload <= 0 && tank.hp > 0) {
+        spawnBullet(tank.x, tank.y, tank.turretAngle, true);
+        tank.reload = 45;
+    }
+};
+
+function spawnBullet(x, y, angle, isPlayer) {
+    bullets.push({ 
+        x: x + Math.cos(angle) * 22, 
+        y: y + Math.sin(angle) * 22, 
+        vx: Math.cos(angle) * 6, 
+        vy: Math.sin(angle) * 6, 
+        isPlayer 
+    });
+}
+
+function hitFlash() {
+    overlay.style.background = "rgba(255, 0, 0, 0.4)";
+    setTimeout(() => overlay.style.background = "transparent", 100);
+}
+
+function update() {
+    if (tank.hp <= 0) return;
+
+    // Управление игрока (замедленное)
+    if (keys['KeyA']) tank.angle -= 0.025;
+    if (keys['KeyD']) tank.angle += 0.025; 
+    if (keys['KeyW']) tank.speed = 1.2;
+    else if (keys['KeyS']) tank.speed = -0.8;
+    else tank.speed *= 0.9;
+
+    let nx = tank.x + Math.cos(tank.angle) * tank.speed;
+    let ny = tank.y + Math.sin(tank.angle) * tank.speed;
+    if (checkBrickCollision(nx, ny, 14) === -1) { tank.x = nx; tank.y = ny; }
+    
+    tank.vx = Math.cos(tank.angle) * tank.speed;
+    tank.vy = Math.sin(tank.angle) * tank.speed;
+    if (tank.reload > 0) tank.reload--;
+
+    // Пули
+    for (let i = bullets.length - 1; i >= 0; i--) {
+        let b = bullets[i];
+        b.x += b.vx; b.y += b.vy;
+
+        let brickIdx = checkBrickCollision(b.x, b.y, 2);
+        if (brickIdx !== -1) {
+            bricks.splice(brickIdx, 1);
+            bullets.splice(i, 1);
+            continue;
+        }
+
+        // В игрока
+        if (!b.isPlayer && Math.hypot(b.x - tank.x, b.y - tank.y) < 18) {
+            tank.hp--;
+            document.getElementById('hp').innerText = tank.hp;
+            hitFlash();
+            bullets.splice(i, 1);
+            if (tank.hp <= 0) alert("ТАНК УНИЧТОЖЕН");
+            continue;
+        }
+
+        // Во врагов
+        if (b.isPlayer) {
+            turrets.concat(enemyTanks).forEach((enemy, idx) => {
+                if (Math.hypot(b.x - enemy.x, b.y - enemy.y) < 22) {
+                    enemy.hp--;
+                    bullets.splice(i, 1);
+                    if (enemy.hp <= 0) {
+                        if (idx < turrets.length) turrets.splice(idx, 1);
+                        else enemyTanks.splice(idx - turrets.length, 1);
+                        updateEnemyCount();
+                        if (turrets.length + enemyTanks.length === 0) document.getElementById('victory').style.display = 'block';
+                    }
+                }
+            });
+        }
+        if (b.x < 0 || b.x > width || b.y < 0 || b.y > height) bullets.splice(i, 1);
+    }
+
+    // ИИ Турелей
+    turrets.forEach(t => {
+        if (canSee(t, tank)) {
+            let dist = Math.hypot(tank.x - t.x, tank.y - t.y);
+            t.angle = Math.atan2(tank.y + tank.vy*(dist/6) - t.y, tank.x + tank.vx*(dist/6) - t.x);
+            if (t.reload <= 0) {
+                spawnBullet(t.x, t.y, t.angle + (Math.random()-0.5)*0.15, false);
+                t.reload = 120;
+            }
+        }
+        if (t.reload > 0) t.reload--;
+    });
+
+    // ИИ Вражеских танков
+    enemyTanks.forEach(et => {
+        let seesPlayer = canSee(et, tank);
+        
+        if (seesPlayer) {
+            et.state = 'attack';
+            let dist = Math.hypot(tank.x - et.x, tank.y - et.y);
+            et.turretAngle = Math.atan2(tank.y + tank.vy*(dist/6) - et.y, tank.x + tank.vx*(dist/6) - et.x);
+            if (et.reload <= 0) {
+                spawnBullet(et.x, et.y, et.turretAngle, false);
+                et.reload = 100;
+            }
+        } else {
+            et.state = 'patrol';
+            et.turretAngle = et.angle;
+        }
+
+        if (et.state === 'patrol') {
+            let angleToTarget = Math.atan2(et.targetY - et.y, et.targetX - et.x);
+            let diff = angleToTarget - et.angle;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            et.angle += Math.sign(diff) * 0.02;
+
+            let enx = et.x + Math.cos(et.angle) * et.speed;
+            let eny = et.y + Math.sin(et.angle) * et.speed;
+
+            if (checkBrickCollision(enx, eny, 14) === -1) {
+                et.x = enx; et.y = eny;
+            } else {
+                et.targetX = Math.random() * width;
+                et.targetY = Math.random() * height;
+            }
+
+            if (Math.hypot(et.x - et.targetX, et.y - et.targetY) < 50) {
+                et.targetX = Math.random() * width;
+                et.targetY = Math.random() * height;
+            }
+        }
+        if (et.reload > 0) et.reload--;
+    });
+}
+
+function drawTank(t, bodyColor, turretColor, isPlayer) {
+    // Корпус
+    ctx.save();
+    ctx.translate(t.x, t.y);
+    ctx.rotate(t.angle);
+    ctx.fillStyle = bodyColor;
+    ctx.fillRect(-t.w/2, -t.h/2, t.w, t.h);
+    // Маркер переда
+    ctx.fillStyle = isPlayer ? '#81C784' : '#BBB';
+    ctx.fillRect(t.w/2 - 5, -t.h/2, 5, t.h);
+    ctx.restore();
+
+    // Башня
+    ctx.save();
+    ctx.translate(t.x, t.y);
+    ctx.rotate(t.turretAngle);
+    ctx.fillStyle = '#333';
+    ctx.fillRect(10, -3, 22, 6); // Ствол
+    ctx.beginPath();
+    ctx.arc(0, 0, 11, 0, Math.PI*2);
+    ctx.fillStyle = turretColor;
+    ctx.fill();
+    ctx.restore();
+}
+
+function draw() {
+    ctx.fillStyle = '#222';
+    ctx.fillRect(0, 0, width, height);
+
+    bricks.forEach(b => {
+        ctx.fillStyle = '#8b4513';
+        ctx.fillRect(b.x, b.y, BRICK_SIZE-1, BRICK_SIZE-1);
+    });
+
+    if (tank.hp > 0) drawTank(tank, '#4CAF50', '#2E7D32', true);
+
+    turrets.forEach(t => {
+        ctx.save();
+        ctx.translate(t.x, t.y);
+        ctx.rotate(t.angle);
+        ctx.fillStyle = '#f44336'; ctx.fillRect(-20, -20, 40, 40);
+        ctx.fillStyle = '#000'; ctx.fillRect(10, -5, 25, 10);
+        ctx.restore();
+        ctx.fillStyle = 'lime'; ctx.fillRect(t.x - 20, t.y - 32, (t.hp / 2) * 40, 5);
+    });
+
+    enemyTanks.forEach(et => {
+        drawTank(et, '#757575', '#424242', false);
+        ctx.fillStyle = 'lime'; ctx.fillRect(et.x - 18, et.y - 30, (et.hp / 2) * 36, 4);
+    });
+
+    bullets.forEach(b => {
+        ctx.fillStyle = b.isPlayer ? '#ffeb3b' : '#ff9800';
+        ctx.beginPath(); ctx.arc(b.x, b.y, 4, 0, Math.PI * 2); ctx.fill();
+    });
+
+    update();
+    requestAnimationFrame(draw);
+}
+
+init();
+draw();
+</script>
+</body>
+</html>
